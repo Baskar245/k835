@@ -1,1 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Update Status</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #eef2f3, #8e9eab);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background-color: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    label {
+      font-size: 16px;
+      display: block;
+      margin-bottom: 8px;
+      color: #555;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 15px;
+    }
+
+    button[type="submit"] {
+      background-color: #28a745;
+      color: white;
+    }
+
+    button[type="submit"]:hover {
+      background-color: #218838;
+    }
+
+    .tracking-btn {
+      background-color: #007bff;
+      color: white;
+    }
+
+    .tracking-btn:hover {
+      background-color: #0056b3;
+    }
+
+    .stop-btn {
+      background-color: #dc3545;
+      color: white;
+    }
+
+    .stop-btn:hover {
+      background-color: #b52a3c;
+    }
+
+    a {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      color: #007bff;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 20px;
+        border-radius: 10px;
+      }
+
+      button {
+        font-size: 15px;
+        padding: 10px;
+      }
+
+      select {
+        font-size: 15px;
+      }
+    }
+  </style>
+
+  <script>
+    let watchInterval;
+
+    function startLiveLocationUpdates() {
+      if (navigator.geolocation) {
+        watchInterval = setInterval(() => {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            fetch('/update_location', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                lat: lat,
+                lng: lng,
+                bus_name: "{{ bus[:-4] }}"
+              })
+            }).then(response => {
+              if (!response.ok) {
+                console.error("Error while sending location");
+              }
+            }).catch(err => {
+              console.error("Fetch error:", err);
+            });
+
+          }, function(error) {
+            console.error("Geolocation error:", error.message);
+          });
+        }, 5000); // Every 5 seconds
+      } else {
+        alert("Geolocation is not supported by this browser.");
+      }
+    }
+
+    function stopLiveTracking() {
+      clearInterval(watchInterval);
+      alert("Stopped live tracking.");
+    }
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h2>Bus: {{ bus }}</h2>
+    <form method="POST">
+      <label for="status">Update Status:</label>
+      <select name="status" id="status">
+        <option value="on time">On Time</option>
+        <option value="late">Late</option>
+        <option value="cancelled">Cancelled</option>
+        <option value="not working">Not Working</option>
+      </select>
+
+      <input type="hidden" name="lat" id="lat">
+      <input type="hidden" name="lng" id="lng">
+
+      <button type="submit">Update Status</button>
+    </form>
+
+    <button class="tracking-btn" onclick="startLiveLocationUpdates()">Start Live Tracking</button>
+    <button class="stop-btn" onclick="stopLiveTracking()">Stop Live Tracking</button>
+
+    <a href="/logout">Logout</a>
+  </div>
+</body>
+</html>
 
