@@ -1,1 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bus Search</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f6f9;
+      color: #333;
+    }
+
+    h2, h3 {
+      color: #1a237e;
+      margin-top: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    .form-section {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .form-section label,
+    .form-section input,
+    .form-section select,
+    .form-section button {
+      margin: 10px 0;
+    }
+
+    .form-group {
+      flex: 1 1 45%;
+      display: flex;
+      flex-direction: column;
+      padding: 0 10px;
+    }
+
+    .time-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #3949ab;
+      border: none;
+      color: white;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #283593;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    th, td {
+      padding: 12px 15px;
+      border: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #3f51b5;
+      color: white;
+    }
+
+    .status-on-time {
+      color: green;
+      font-weight: bold;
+    }
+
+    .status-late {
+      color: red;
+      font-weight: bold;
+    }
+
+    .status-default {
+      color: gray;
+    }
+
+    #map {
+      height: 400px;
+      width: 100%;
+      margin-top: 20px;
+      border-radius: 10px;
+      border: 2px solid #ccc;
+    }
+
+    .location-button {
+      background-color: #00897b;
+      padding: 6px 12px;
+      font-size: 14px;
+      border-radius: 5px;
+    }
+
+    .location-button:hover {
+      background-color: #00695c;
+    }
+
+    @media (max-width: 768px) {
+      .form-group {
+        flex: 1 1 100%;
+      }
+
+      table, th, td {
+        font-size: 14px;
+      }
+
+      .time-group {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Search Available Buses</h2>
+
+    <div class="form-section">
+      <div class="form-group">
+        <label for="start">Start:</label>
+        <input type="text" id="start" placeholder="Enter start location" />
+      </div>
+
+      <div class="form-group">
+        <label for="end">End:</label>
+        <input type="text" id="end" placeholder="Enter end location" />
+      </div>
+
+      <div class="form-group">
+        <label>From Time:</label>
+        <div class="time-group">
+          <select id="from_hour"></select> :
+          <select id="from_minute"></select>
+          <select id="from_ampm">
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>To Time:</label>
+        <div class="time-group">
+          <select id="to_hour"></select> :
+          <select id="to_minute"></select>
+          <select id="to_ampm">
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group" style="align-items: flex-start;">
+        <button onclick="searchBuses()">Search</button>
+      </div>
+    </div>
+
+    <h3>Available Buses</h3>
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th>Bus Name</th>
+          <th>Time</th>
+          <th>Status</th>
+          <th>Live Location</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+
+    <h3>Live Bus Location</h3>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    let map = L.map("map").setView([11.0, 78.0], 7);
+    let markers = {};
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    function clearMarkers() {
+      for (let key in markers) {
+        map.removeLayer(markers[key]);
+      }
+      markers = {};
+    }
+
+    function getStatusClass(status) {
+      if (!status) return "status-default";
+      status = status.toLowerCase();
+      if (status === "on time") return "status-on-time";
+      if (status === "late") return "status-late";
+      return "status-default";
+    }
+
+    function convertTo12Hour(timeStr) {
+      const [hour, minute] = timeStr.split(":");
+      let h = parseInt(hour);
+      const suffix = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      return `${h}:${minute} ${suffix}`;
+    }
+
+    function convertTo24Hour(hour, minute, ampm) {
+      hour = parseInt(hour);
+      if (ampm === "PM" && hour !== 12) hour += 12;
+      if (ampm === "AM" && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, '0')}:${minute}`;
+    }
+
+    function viewBusLocation(busName) {
+      const marker = markers[busName];
+      if (marker) {
+        map.setView(marker.getLatLng(), 15);
+        marker.openPopup();
+      } else {
+        alert("No location available for this bus.");
+      }
+    }
+
+    function populateTimeSelectors() {
+      const hourOptions = [...Array(12).keys()].map(i => `<option value="${i+1}">${i+1}</option>`).join("");
+      const minuteOptions = [...Array(60).keys()].map(i => `<option value="${String(i).padStart(2, '0')}">${String(i).padStart(2, '0')}</option>`).join("");
+
+      document.getElementById("from_hour").innerHTML = hourOptions;
+      document.getElementById("to_hour").innerHTML = hourOptions;
+      document.getElementById("from_minute").innerHTML = minuteOptions;
+      document.getElementById("to_minute").innerHTML = minuteOptions;
+
+      document.getElementById("from_hour").value = "8";
+      document.getElementById("from_minute").value = "00";
+      document.getElementById("from_ampm").value = "AM";
+
+      document.getElementById("to_hour").value = "12";
+      document.getElementById("to_minute").value = "00";
+      document.getElementById("to_ampm").value = "PM";
+    }
+
+    function searchBuses() {
+      const start = document.getElementById("start").value.trim();
+      const end = document.getElementById("end").value.trim();
+
+      const timeFrom = convertTo24Hour(
+        document.getElementById("from_hour").value,
+        document.getElementById("from_minute").value,
+        document.getElementById("from_ampm").value
+      );
+      const timeTo = convertTo24Hour(
+        document.getElementById("to_hour").value,
+        document.getElementById("to_minute").value,
+        document.getElementById("to_ampm").value
+      );
+
+      if (!start || !end) {
+        alert("Please enter both start and end locations.");
+        return;
+      }
+
+      const query = `/search?start=${start}&end=${end}&time_from=${timeFrom}&time_to=${timeTo}`;
+
+      fetch(query)
+        .then(response => response.json())
+        .then(data => {
+          const resultBody = document.getElementById("resultBody");
+          resultBody.innerHTML = "";
+          clearMarkers();
+
+          if (data.length === 0) {
+            resultBody.innerHTML = `<tr><td colspan="4">No buses found</td></tr>`;
+            return;
+          }
+
+          data.forEach(bus => {
+            const statusClass = getStatusClass(bus.status);
+            const statusText = bus.status || "Not updated";
+            const formattedTime = convertTo12Hour(bus.time);
+
+            const locationCell = (bus.location && bus.location.lat && bus.location.lng)
+              ? `<button class="location-button" onclick="viewBusLocation('${bus.busName}')">View</button>`
+              : `<span style="color: gray;">Not Available</span>`;
+
+            resultBody.innerHTML += `
+              <tr>
+                <td>${bus.busName}</td>
+                <td>${formattedTime}</td>
+                <td class="${statusClass}">${statusText}</td>
+                <td>${locationCell}</td>
+              </tr>`;
+
+            if (bus.location && bus.location.lat && bus.location.lng) {
+              const marker = L.marker([bus.location.lat, bus.location.lng])
+                .addTo(map)
+                .bindPopup(`<b>${bus.busName}</b><br>${formattedTime}<br>Status: ${statusText}`);
+              markers[bus.busName] = marker;
+            }
+          });
+        })
+        .catch(error => console.error("Error fetching data:", error));
+    }
+
+    window.onload = populateTimeSelectors;
+  </script>
+</body>
+</html>
 
